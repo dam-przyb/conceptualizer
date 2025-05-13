@@ -1,56 +1,65 @@
+import tkinter as tk
+from tkinter import ttk
 import gradio as gr
+import tqdm
 import json
 from ollama import Client  # Import the Client class
 
-# Configuration
-MODEL = "deepseek-r1:1.5b"  # Or any other model you have in Ollama
 OLLAMA_URL = "http://localhost:11434"  # Default, change if needed
-system_message = "You are a helpful assistant." #You can change the system message
+
+with open("my_tools.txt", "r", encoding="utf-8") as f:
+    tools = f.read()
+
+prompt = f"""
+You are an AI agent specializing in concept development and deconstruction of
+instructions into detailed, step-by-step tasks. \n
+You have the following tools at your disposal: {tools}. \n
+If the concept involves the use of tools beyond those listed, suggest using other tools.
+"""
+
+# Initialize Ollama client
+ollama_client = Client(host=OLLAMA_URL)
+
+# Define the list of options
+options = [mod.model for mod in ollama_client.list().models]
+selected_option = None
+
+def get_selected_option():
+    global selected_option
+    selected_option = dropdown.get()
+    print(f"You selected: {selected_option}")
+    # You can now use the selected option in your Python script
+
+    root.destroy()  # Close the popup window
+
+# Create the main window
+root = tk.Tk()
+root.title("Select an Option")
+
+# Create the dropdown
+dropdown = ttk.Combobox(root, values=options)
+dropdown.pack(pady=20)
+
+# Create the submit button
+submit_button = tk.Button(root, text="Submit", command=get_selected_option)
+
+submit_button.pack(pady=10)
+
+# Start the main loop
+root.mainloop()
+
+# Configuration
+MODEL = selected_option #"codellama:7b"  # Or any other model you have in Ollama
 
 # Initialize Ollama client
 ollama_client = Client(host=OLLAMA_URL)
 
 def chat(message, history):
-    """
-    Modified chat function to use Ollama instead of OpenAI.
-    It maintains a similar structure to the original function
-    for compatibility with Gradio's expected input/output.
-    """
     messages = [{"role": "system", "content": system_message}] + history + [{"role": "user", "content": message}]
-
-    print("History is:")
-    print(history)
-    print("And messages is:")
-    print(messages)
-    # Ollama expects a single list of messages, not a stream.
-    # We build the messages list as before.
-
-    # Format history for Ollama.  Ollama expects the history to be
-    # in the same format as the user and assistant messages:
-    # { 'role': 'user' or 'assistant', 'content': '...' }
-    ollama_messages = []
-    if system_message:
-        ollama_messages.append({'role': 'system', 'content': system_message})
-    for turn in history:
-        ollama_messages.append({'role': 'user', 'content': turn[0]}) # User message
-        ollama_messages.append({'role': 'assistant', 'content': turn[1]}) # Assistant response
-    ollama_messages.append({'role': 'user', 'content': message})
-
-    try:
-        # Call Ollama API
-        response = ollama_client.chat(model=MODEL, messages=ollama_messages)
-        # The response from Ollama is a dictionary.  Extract the text.
-        reply = response['message']['content']
-        print(f"Ollama Response: {reply}")
-        yield reply #Changed from response += to yield reply
-    except Exception as e:
-        error_message = f"Error calling Ollama: {e}"
-        print(error_message)
-        yield error_message # Return the error message
-
-# Setup Gradio interface
-inputs = [gr.Textbox(label="Message"), gr.State([])] #gr.State to hold conversation history
-outputs = gr.Chatbot(label="Chat with Ollama")
+    response = ollama_client.chat(model=MODEL, messages=messages)
+    # The response from Ollama is a dictionary.  Extract the text.
+    reply = response['message']['content']
+    return reply
 
 # Create a Gradio ChatInterface
 iface = gr.ChatInterface(
@@ -60,5 +69,4 @@ iface = gr.ChatInterface(
     description=f"Chat with the Ollama model: {MODEL}",
 )
 
-if __name__ == "__main__":
-    iface.launch(inbrowser=True)
+iface.launch(inbrowser=True)
